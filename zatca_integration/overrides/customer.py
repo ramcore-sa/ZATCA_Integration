@@ -85,9 +85,42 @@ def stash_quick_entry_address_values(doc):
         }
 
 
+def default_customer_country(doc, get_default=None):
+    """
+    Fill an empty Country on a Company customer with the system's own country.
+
+    A Company customer without a Country is refused below, and anything that
+    creates customers without knowing this app's field hit that refusal: ERPNext's
+    setup wizard demo data, for one, which builds its customers from a fixture,
+    failed whole with "Customer Country is required for Company customers." The
+    system's country (System Settings, or the default company's) is the right
+    guess for a customer nobody placed elsewhere; with neither, the field stays
+    empty and the refusal still stands. A Country that was entered is never
+    touched.
+    """
+    if doc.get("customer_type") != "Company":
+        return
+    if str(doc.get("custom_country") or "").strip():
+        return
+    country = (get_default or system_country)()
+    if country:
+        doc.set("custom_country", country)
+
+
+def system_country():
+    """The country this system runs in: System Settings, else the default company's."""
+    country = frappe.db.get_single_value("System Settings", "country")
+    if not country:
+        company = frappe.defaults.get_global_default("company")
+        if company:
+            country = frappe.db.get_value("Company", company, "country")
+    return country or None
+
+
 def validate(doc, method=None):
     """Server-side Customer rules for ZATCA identification fields."""
     stash_quick_entry_address_values(doc)
+    default_customer_country(doc)
 
     # Keep the VAT Category Select matching its options (invisible characters or
     # a different case make the field render blank and save blank again).
